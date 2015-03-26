@@ -206,6 +206,7 @@ class Configuration implements ConfigurationInterface
                         ->children()
                             ->scalarNode('connection')->defaultValue('default')->end()
                             ->scalarNode('callback')->isRequired()->end()
+                            ->scalarNode('type')->defaultValue('fanout')->end()
                             ->arrayNode('qos_options')
                                 ->canBeUnset()
                                 ->children()

@@ -327,7 +327,7 @@ class OldSoundRabbitMqExtension extends Extension
             $definition
                 ->addTag('old_sound_rabbit_mq.base_amqp')
                 ->addTag('old_sound_rabbit_mq.rpc_server')
-                ->addMethodCall('initServer', array($key))
+                ->addMethodCall('initServer', array($key, $server['type']))
                 ->addMethodCall('setCallback', array(array(new Reference($server['callback']), 'execute')));
             $this->injectConnection($definition, $server['connection']);
             if ($this->collectorEnabled) {

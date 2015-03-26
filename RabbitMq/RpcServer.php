@@ -8,9 +8,10 @@ class RpcServer extends BaseConsumer
 {
     private $serializer = 'serialize';
 
-    public function initServer($name)
+    public function initServer($name, $type)
     {
-        $this->setExchangeOptions(array('name' => $name, 'type' => 'topic'));
+        $this->disableAutoSetupFabric();
+        $this->setExchangeOptions(array('name' => $name, 'type' => 'fanout'));
         $this->setQueueOptions(array('name' => $name . '-queue'));
     }
 
