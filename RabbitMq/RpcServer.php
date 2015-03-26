@@ -10,7 +10,7 @@ class RpcServer extends BaseConsumer
 
     public function initServer($name)
     {
-        $this->setExchangeOptions(array('name' => $name, 'type' => 'direct'));
+        $this->setExchangeOptions(array('name' => $name, 'type' => 'topic'));
         $this->setQueueOptions(array('name' => $name . '-queue'));
     }
 
