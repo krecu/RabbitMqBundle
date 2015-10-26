@@ -2,6 +2,7 @@
 
 namespace OldSound\RabbitMqBundle\RabbitMq;
 
+use OldSound\RabbitMqBundle\RabbitMq\Exception\RequeueAndStopConsumerException;
 use OldSound\RabbitMqBundle\RabbitMq\Exception\SendReplyAndStopConsumerException;
 use PhpAmqpLib\Message\AMQPMessage;
 
@@ -18,17 +19,28 @@ class RpcServer extends BaseConsumer
 
     public function processMessage(AMQPMessage $msg)
     {
+        $sendReply = true;
         try {
-            $msg->delivery_info['channel']->basic_ack($msg->delivery_info['delivery_tag']);
             try {
                 $result = call_user_func($this->callback, $msg);
-                $result = call_user_func($this->serializer, $result);
+
+                $msg->delivery_info['channel']->basic_ack($msg->delivery_info['delivery_tag']);
             }
             catch(SendReplyAndStopConsumerException $e) {
                 $result = $e->getMessage();
                 $this->forceStopConsumer();
             }
-            $this->sendReply($result, $msg->get('reply_to'), $msg->get('correlation_id'));
+            catch(RequeueAndStopConsumerException $e) {
+                $result = $e->getMessage();
+                $this->forceStopConsumer();
+                $sendReply = false;
+
+                $msg->delivery_info['channel']->basic_reject($msg->delivery_info['delivery_tag'], true);
+            }
+            $result = call_user_func($this->serializer, $result);
+            if($sendReply) {
+                $this->sendReply($result, $msg->get('reply_to'), $msg->get('correlation_id'));
+            }
             $this->consumed++;
             $this->maybeStopConsumer();
         }
