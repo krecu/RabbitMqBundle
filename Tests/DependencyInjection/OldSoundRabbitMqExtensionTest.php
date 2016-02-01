@@ -19,7 +19,7 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
         $definition = $container->getDefinition('old_sound_rabbit_mq.connection.foo_connection');
         $this->assertTrue($container->has('old_sound_rabbit_mq.connection_factory.foo_connection'));
         $factory = $container->getDefinition('old_sound_rabbit_mq.connection_factory.foo_connection');
-        $this->assertEquals('old_sound_rabbit_mq.connection_factory.foo_connection', $definition->getFactoryService());
+        $this->assertEquals(array('old_sound_rabbit_mq.connection_factory.foo_connection', 'createConnection'), $definition->getFactory());
         $this->assertEquals(array(
             'host' => 'foo_host',
             'port' => 123,
@@ -44,7 +44,7 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
         $definition = $container->getDefinition('old_sound_rabbit_mq.connection.ssl_connection');
         $this->assertTrue($container->has('old_sound_rabbit_mq.connection_factory.ssl_connection'));
         $factory = $container->getDefinition('old_sound_rabbit_mq.connection_factory.ssl_connection');
-        $this->assertEquals('old_sound_rabbit_mq.connection_factory.ssl_connection', $definition->getFactoryService());
+        $this->assertEquals(array('old_sound_rabbit_mq.connection_factory.ssl_connection', 'createConnection'), $definition->getFactory());
         $this->assertEquals(array(
             'host' => 'ssl_host',
             'port' => 123,
@@ -71,7 +71,7 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
         $definition = $container->getDefinition('old_sound_rabbit_mq.connection.lazy_connection');
         $this->assertTrue($container->has('old_sound_rabbit_mq.connection_factory.lazy_connection'));
         $factory = $container->getDefinition('old_sound_rabbit_mq.connection_factory.lazy_connection');
-        $this->assertEquals('old_sound_rabbit_mq.connection_factory.lazy_connection', $definition->getFactoryService());
+        $this->assertEquals(array('old_sound_rabbit_mq.connection_factory.lazy_connection', 'createConnection'), $definition->getFactory());
         $this->assertEquals(array(
             'host' => 'lazy_host',
             'port' => 456,
@@ -96,7 +96,7 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
         $definition = $container->getDefinition('old_sound_rabbit_mq.connection.default');
         $this->assertTrue($container->has('old_sound_rabbit_mq.connection_factory.default'));
         $factory = $container->getDefinition('old_sound_rabbit_mq.connection_factory.default');
-        $this->assertEquals('old_sound_rabbit_mq.connection_factory.default', $definition->getFactoryService());
+        $this->assertEquals(array('old_sound_rabbit_mq.connection_factory.default', 'createConnection'), $definition->getFactory());
         $this->assertEquals(array(
             'host' => 'localhost',
             'port' => 5672,
@@ -391,6 +391,49 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
             $definition->getMethodCalls()
         );
     }
+    
+    public function testDynamicConsumerDefinition()
+    {
+        $container = $this->getContainer('test.yml');
+        
+        $this->assertTrue($container->has('old_sound_rabbit_mq.foo_dyn_consumer_dynamic'));
+        $this->assertTrue($container->has('old_sound_rabbit_mq.bar_dyn_consumer_dynamic'));
+        
+        $definition = $container->getDefinition('old_sound_rabbit_mq.foo_dyn_consumer_dynamic');
+        $this->assertEquals(array(
+                array(
+                    'setExchangeOptions',
+                        array(
+                            array(
+                                'name' => 'foo_dynamic_exchange',
+                                'type' => 'direct',
+                                'passive' => false,
+                                'durable' => true,
+                                'auto_delete' => false,
+                                'internal' => false,
+                                'nowait' => false,
+                                'declare' => true,
+                                'arguments' => NULL,
+                                'ticket' => NULL,
+                            )
+                        )
+                ),
+                array(
+                    'setCallback',
+                        array(
+                            array(new Reference('foo.dynamic.callback'), 'execute')
+                        )
+                ),
+                array(
+                    'setQueueOptionsProvider',
+                        array(
+                            new Reference('foo.dynamic.provider')
+                        )
+                )
+            ),
+            $definition->getMethodCalls()
+        );
+    }
 
     public function testFooAnonConsumerDefinition()
     {
@@ -560,6 +603,36 @@ class OldSoundRabbitMqExtensionTest extends \PHPUnit_Framework_TestCase
                 ))),
                 array('setSerializer', array('serialize')),
             ),
+            $definition->getMethodCalls()
+        );
+        $this->assertEquals('%old_sound_rabbit_mq.rpc_server.class%', $definition->getClass());
+    }
+
+    public function testRpcServerWithExchangeOptionsDefinition()
+    {
+        $container = $this->getContainer('test.yml');
+
+        $this->assertTrue($container->has('old_sound_rabbit_mq.server_with_exchange_options_server'));
+        $definition = $container->getDefinition('old_sound_rabbit_mq.server_with_exchange_options_server');
+        $this->assertEquals((string) $definition->getArgument(0), 'old_sound_rabbit_mq.connection.default');
+        $this->assertEquals((string) $definition->getArgument(1), 'old_sound_rabbit_mq.channel.server_with_exchange_options');
+        $this->assertEquals(array(
+            array('initServer', array('server_with_exchange_options')),
+            array('setCallback', array(array(new Reference('server_with_exchange_options.callback'), 'execute'))),
+            array('setExchangeOptions', array(array(
+                'name'         => 'exchange',
+                'type'         => 'topic',
+                'passive'      => false,
+                'durable'      => true,
+                'auto_delete'  => false,
+                'internal'     => null,
+                'nowait'       => false,
+                'declare'      => true,
+                'arguments'    => null,
+                'ticket'       => null,
+            ))),
+            array('setSerializer', array('serialize')),
+        ),
             $definition->getMethodCalls()
         );
         $this->assertEquals('%old_sound_rabbit_mq.rpc_server.class%', $definition->getClass());

@@ -1,3 +1,7 @@
+# Looking for New Maintainer #
+
+See issue: https://github.com/videlalvaro/RabbitMqBundle/issues/327
+
 # RabbitMqBundle #
 
 ## About ##
@@ -27,14 +31,10 @@ This bundle was presented at [Symfony Live Paris 2011](http://www.symfony-live.c
 
 ### For Symfony Framework >= 2.3 ###
 
-Require the bundle in your composer.json file:
+Require the bundle and its dependencies with composer:
 
-````
-{
-    "require": {
-        "oldsound/rabbitmq-bundle": "1.*",
-    }
-}
+```bash
+$ composer require oldsound/rabbitmq-bundle
 ```
 
 Register the bundle:
@@ -48,12 +48,6 @@ public function registerBundles()
         new OldSound\RabbitMqBundle\OldSoundRabbitMqBundle(),
     );
 }
-```
-
-Install the bundle:
-
-```
-$ composer update oldsound/rabbitmq-bundle
 ```
 
 Enjoy !
@@ -178,6 +172,10 @@ configuration to avoid unnecessary connections to your message broker in every r
 It's extremely recommended to use lazy connections because performance reasons, nevertheless lazy option is disabled
 by default to avoid possible breaks in applications already using this bundle.
 
+### Import notice - Heartbeats ###
+
+It's a good idea to set the ```read_write_timeout``` to 2x the heartbeat so your socket will be open. If you don't do this, or use a different multiplier, there's a risk the __consumer__ socket will timeout.
+
 ## Producers, Consumers, What? ##
 
 In a messaging application, the process sending messages to the broker is called __producer__ while the process receiving those messages is called __consumer__. In your application you will have several of them that you can list under their respective entries in the configuration.
@@ -269,6 +267,12 @@ If you want to remove all the messages awaiting in a queue, you can execute this
 
 ```bash
 $ ./app/console rabbitmq:purge --no-confirmation upload_picture
+```
+
+For deleting the consumer's queue, use this command:
+
+```bash
+$ ./app/console rabbitmq:delete --no-confirmation upload_picture
 ```
 
 #### Idle timeout ####
@@ -377,6 +381,7 @@ rpc_servers:
         connection: default
         callback:   random_int_server
         qos_options: {prefetch_size: 0, prefetch_count: 1, global: false}
+        exchange_options: {name: random_int, type: topic}
         queue_options: {name: random_int_queue, durable: false, auto_delete: true}
         serializer: json_encode
 ```
@@ -412,7 +417,7 @@ The arguments we are sending are the __min__ and __max__ values for the `rand()`
 
 The final piece is to get the reply. Our PHP script will block till the server returns a value. The __$replies__ variable will be an associative array where each reply from the server will contained in the respective __request\_id__ key.
 
-By default the RCP Client expects the response to be serialized. If the server you are working with returns a non-serialized result then set the RPC client expect_serialized_response option to false. For example, if the integer_store server didn't serialize the result the client would be set as below:
+By default the RPC Client expects the response to be serialized. If the server you are working with returns a non-serialized result then set the RPC client expect_serialized_response option to false. For example, if the integer_store server didn't serialize the result the client would be set as below:
 
 ```yaml
 rpc_clients:
@@ -428,7 +433,7 @@ public function indexAction($name)
 {
     $expiration = 5; // seconds
     $client = $this->get('old_sound_rabbit_mq.integer_store_rpc');
-    $client->addRequest($body, $server, $requestId, $expiration);
+    $client->addRequest($body, $server, $requestId, $routingKey, $expiration);
     try {
         $replies = $client->getReplies();
         // process $replies['request_id'];
@@ -514,6 +519,32 @@ It must implement `QueuesProviderInterface`.
 Be aware that queues providers are responsible for the proper calls to `setDequeuer` and that callbacks are callables
 (not `ConsumerInterface`). In case service providing queues implements `DequeuerAwareInterface`, a call to
 `setDequeuer` is added to the definition of the service with a `DequeuerInterface` currently being a `MultipleConsumer`.
+
+### Dynamic Consumers ###
+
+Sometimes you have to change the consumer's configuration on the fly.
+Dynamic consumers allow you to define the consumers queue options programatically, based on the context.
+
+e.g. In a scenario when the defined consumer must be responsible for a dynamic number of topics and you do not want (or can't) change it's configuration every time.
+
+Define a service `queue_options_provider` that implements the `QueueOptionsProviderInterface`, and add it to your `dynamic_consumers` configuration.
+
+```yaml
+dynamic_consumers:
+    proc_logs:
+        connection: default
+        exchange_options: {name: 'logs', type: topic}
+        callback: parse_logs_service
+        queue_options_provider: queue_options_provider_service
+```
+
+Example Usage:
+
+```bash
+$ ./app/console rabbitmq:dynamic-consumer proc_logs server1
+```
+
+In this case the `proc_logs` consumer runs for `server1` and it can decide over the queue options it uses.
 
 ### Anonymous Consumers ###
 

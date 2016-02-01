@@ -49,6 +49,7 @@ class OldSoundRabbitMqExtension extends Extension
         $this->loadProducers();
         $this->loadConsumers();
         $this->loadMultipleConsumers();
+        $this->loadDynamicConsumers();
         $this->loadAnonConsumers();
         $this->loadRpcClients();
         $this->loadRpcServers();
@@ -82,8 +83,14 @@ class OldSoundRabbitMqExtension extends Extension
             $this->container->setDefinition($factoryName, $definition);
 
             $definition = new Definition($classParam);
-            $definition->setFactoryService($factoryName);
-            $definition->setFactoryMethod('createConnection');
+            if (method_exists($definition, 'setFactory')) {
+                // to be inlined in services.xml when dependency on Symfony DependencyInjection is bumped to 2.6
+                $definition->setFactory(array(new Reference($factoryName), 'createConnection'));
+            } else {
+                // to be removed when dependency on Symfony DependencyInjection is bumped to 2.6
+                $definition->setFactoryService($factoryName);
+                $definition->setFactoryMethod('createConnection');
+            }
 
             $this->container->setDefinition(sprintf('old_sound_rabbit_mq.connection.%s', $key), $definition);
         }
@@ -227,6 +234,57 @@ class OldSoundRabbitMqExtension extends Extension
             }
         }
     }
+    
+    protected function loadDynamicConsumers()
+    {   
+        foreach ($this->config['dynamic_consumers'] as $key => $consumer) {
+            
+            if (empty($consumer['queue_options_provider'])) {
+                throw new InvalidConfigurationException(
+                    "Error on loading $key dynamic consumer. " .
+                    "'queue_provider' parameter should be defined."
+                );
+            }
+            
+            $definition = new Definition('%old_sound_rabbit_mq.dynamic_consumer.class%');
+            $definition
+                ->addTag('old_sound_rabbit_mq.base_amqp')
+                ->addTag('old_sound_rabbit_mq.consumer')
+                ->addTag('old_sound_rabbit_mq.dynamic_consumer')
+                ->addMethodCall('setExchangeOptions', array($this->normalizeArgumentKeys($consumer['exchange_options'])))
+                ->addMethodCall('setCallback', array(array(new Reference($consumer['callback']), 'execute')));
+
+            if (array_key_exists('qos_options', $consumer)) {
+                $definition->addMethodCall('setQosOptions', array(
+                    $consumer['qos_options']['prefetch_size'],
+                    $consumer['qos_options']['prefetch_count'],
+                    $consumer['qos_options']['global']
+                ));
+            }
+            
+            $definition->addMethodCall(
+                    'setQueueOptionsProvider',
+                    array(new Reference($consumer['queue_options_provider']))
+                );
+            
+            if(isset($consumer['idle_timeout'])) {
+                $definition->addMethodCall('setIdleTimeout', array($consumer['idle_timeout']));
+            }
+            if (!$consumer['auto_setup_fabric']) {
+                $definition->addMethodCall('disableAutoSetupFabric');
+            }
+
+            $this->injectConnection($definition, $consumer['connection']);
+            if ($this->collectorEnabled) {
+                $this->injectLoggedChannel($definition, $key, $consumer['connection']);
+            }
+
+            $name = sprintf('old_sound_rabbit_mq.%s_dynamic', $key);
+            $this->container->setDefinition($name, $definition);
+            $this->addDequeuerAwareCall($consumer['callback'], $name);
+            $this->addDequeuerAwareCall($consumer['queue_options_provider'], $name);
+        }
+    }
 
     protected function loadAnonConsumers()
     {
@@ -339,6 +397,9 @@ class OldSoundRabbitMqExtension extends Extension
                     $server['qos_options']['prefetch_count'],
                     $server['qos_options']['global']
                 ));
+            }
+            if (array_key_exists('exchange_options', $server)) {
+                $definition->addMethodCall('setExchangeOptions', array($server['exchange_options']));
             }
             if (array_key_exists('queue_options', $server)) {
                 $definition->addMethodCall('setQueueOptions', array($server['queue_options']));

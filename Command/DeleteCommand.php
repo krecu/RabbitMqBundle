@@ -8,17 +8,17 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Command to purge a queue
+ * Command to delete a queue
  */
-class PurgeConsumerCommand extends ConsumerCommand
+class DeleteCommand extends ConsumerCommand
 {
     protected function configure()
     {
         $this->addArgument('name', InputArgument::REQUIRED, 'Consumer Name')
-             ->setDescription('Purge a consumer\'s queue')
-             ->addOption('no-confirmation', null, InputOption::VALUE_NONE, 'Whether it must be confirmed before purging');
+             ->setDescription('Delete a consumer\'s queue')
+             ->addOption('no-confirmation', null, InputOption::VALUE_NONE, 'Whether it must be confirmed before deleting');
 
-        $this->setName('rabbitmq:purge');
+        $this->setName('rabbitmq:delete');
     }
 
     /**
@@ -32,9 +32,9 @@ class PurgeConsumerCommand extends ConsumerCommand
         $noConfirmation = (bool) $input->getOption('no-confirmation');
 
         if (!$noConfirmation && $input->isInteractive()) {
-            $confirmation = $this->getHelper('dialog')->askConfirmation($output, sprintf('<question>Are you sure you wish to purge "%s" queue? (y/n)</question>', $input->getArgument('name')), false);
+            $confirmation = $this->getHelper('dialog')->askConfirmation($output, sprintf('<question>Are you sure you wish to delete "%s" consumer\'s queue?(y/n)</question>', $input->getArgument('name')), false);
             if (!$confirmation) {
-                $output->writeln('<error>Purging cancelled!</error>');
+                $output->writeln('<error>Deletion cancelled!</error>');
 
                 return 1;
             }
@@ -42,6 +42,6 @@ class PurgeConsumerCommand extends ConsumerCommand
 
         $this->consumer = $this->getContainer()
             ->get(sprintf($this->getConsumerService(), $input->getArgument('name')));
-        $this->consumer->purge($input->getArgument('name'));
+        $this->consumer->delete();
     }
 }
